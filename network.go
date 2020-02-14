@@ -40,20 +40,18 @@ func IpToNetworkNumber(ip net.IP) (number NetworkNumber, err error) {
 		return number, ErrInvalidIP
 	}
 
-	var v int
 	var ipBytes net.IP
 	if ipBytes = ip.To4(); ipBytes != nil {
-		v = IPv4
+		number.ver = IPv4
 	} else if ipBytes = ip.To16(); ipBytes != nil {
-		v = IPv6
+		number.ver = IPv6
 	} else {
 		return number, ErrInvalidIP
 	}
 
-	var n = NetworkNumber{ver: v}
-	for i := 0; i < n.ver; i++ {
+	for i := 0; i < number.ver; i++ {
 		idx := i * net.IPv4len
-		n.parts[i] = binary.BigEndian.Uint32(ipBytes[idx : idx+net.IPv4len])
+		number.parts[i] = binary.BigEndian.Uint32(ipBytes[idx : idx+net.IPv4len])
 	}
 
 	return
@@ -76,21 +74,14 @@ func (n NetworkNumber) ToIP() net.IP {
 }
 
 func (n NetworkNumber) Equal(n1 NetworkNumber) bool {
-	if n.ver != n1.ver {
+	if n.ver != n1.ver || n.parts[0] != n1.parts[0] {
 		return false
 	}
 
-	if n.parts[0] != n1.parts[0] {
-		return false
-	}
-
-	if n.ver == IPv6 {
-		return n.parts[1] == n1.parts[1] &&
+	return n.ver == IPv4 ||
+		n.parts[1] == n1.parts[1] &&
 			n.parts[2] == n1.parts[2] &&
 			n.parts[3] == n1.parts[3]
-	}
-
-	return true
 }
 
 func (n *NetworkNumber) BitAt(position uint) (uint32, error) {
@@ -158,18 +149,15 @@ func (n *Network) Version() int {
 }
 
 func (n *Network) Contains(nn *NetworkNumber) bool {
-	if n.Mask.ver != nn.ver {
+	if n.Mask.ver != nn.ver ||
+		nn.parts[0]&n.Mask.parts[0] != n.Number.parts[0] {
 		return false
 	}
-	if nn.parts[0]&n.Mask.parts[0] != n.Number.parts[0] {
-		return false
-	}
-	if nn.ver == IPv6 {
-		return nn.parts[1]&n.Mask.parts[1] == n.Number.parts[1] &&
+
+	return nn.ver == IPv4 ||
+		nn.parts[1]&n.Mask.parts[1] == n.Number.parts[1] &&
 			nn.parts[2]&n.Mask.parts[2] == n.Number.parts[2] &&
 			nn.parts[3]&n.Mask.parts[3] == n.Number.parts[3]
-	}
-	return true
 }
 
 func (n *Network) LastCommonBitPosition(n1 *Network) (uint, error) {

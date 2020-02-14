@@ -184,7 +184,7 @@ func TestNetworkNumberNext(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ip := NewNetworkNumber(net.ParseIP(tc.ip))
 			expected := NewNetworkNumber(net.ParseIP(tc.next))
-			assert.Equal(t, *expected, nextNetworkNumber(*ip))
+			assert.Equal(t, expected, nextNetworkNumber(*ip))
 		})
 	}
 }
