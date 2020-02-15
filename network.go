@@ -61,7 +61,7 @@ func (n *NetworkNumber) Version() int {
 	return n.ver
 }
 
-func (n NetworkNumber) ToIP() net.IP {
+func (n *NetworkNumber) ToIP() net.IP {
 	ip := make(net.IP, n.ver*BytePerUint32)
 	for i := 0; i < n.ver; i++ {
 		idx := i * net.IPv4len
@@ -73,7 +73,7 @@ func (n NetworkNumber) ToIP() net.IP {
 	return ip
 }
 
-func (n NetworkNumber) Equal(n1 NetworkNumber) bool {
+func (n *NetworkNumber) Equal(n1 *NetworkNumber) bool {
 	if n.ver != n1.ver || n.parts[0] != n1.parts[0] {
 		return false
 	}
@@ -119,7 +119,7 @@ type NetworkMask struct {
 }
 
 func (m *NetworkMask) Equal(m1 *NetworkMask) bool {
-	return m.NetworkNumber.Equal(m1.NetworkNumber) && m.ones == m1.ones
+	return m.NetworkNumber.Equal(&m1.NetworkNumber) && m.ones == m1.ones
 }
 
 func (m *NetworkMask) Ones() int {
@@ -174,7 +174,7 @@ func (n *Network) LastCommonBitPosition(n1 *Network) (uint, error) {
 }
 
 func (n *Network) Equal(n1 *Network) bool {
-	return n.Number.Equal(n1.Number) && n.Mask.Equal(&n1.Mask)
+	return n.Number.Equal(&n1.Number) && n.Mask.Equal(&n1.Mask)
 }
 
 func (n *Network) String() string {

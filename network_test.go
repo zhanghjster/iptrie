@@ -161,7 +161,7 @@ func TestNetworkNumberEqual(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.equals, tc.n1.Equal(*tc.n2))
+			assert.Equal(t, tc.equals, tc.n1.Equal(tc.n2))
 		})
 	}
 }
@@ -336,7 +336,7 @@ func TestNetworkContains(t *testing.T) {
 			lastIP := NewNetworkNumber(net.ParseIP(tc.lastIP))
 			assert.False(t, network.Contains(previousNetworkNumber(*ip)))
 			assert.False(t, network.Contains(nextNetworkNumber(*lastIP)))
-			for !ip.Equal(*nextNetworkNumber(*lastIP)) {
+			for !ip.Equal(nextNetworkNumber(*lastIP)) {
 				assert.True(t, network.Contains(ip))
 				ipNext := nextNetworkNumber(*ip)
 				ip = ipNext
@@ -590,7 +590,7 @@ func benchmarkNetworkNumberEqual(b *testing.B, ip1 string, ip2 string) {
 	nn1 := NewNetworkNumber(net.ParseIP(ip1))
 	nn2 := NewNetworkNumber(net.ParseIP(ip2))
 	for n := 0; n < b.N; n++ {
-		nn1.Equal(*nn2)
+		nn1.Equal(nn2)
 	}
 }
 
