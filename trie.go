@@ -18,53 +18,47 @@ type Label struct {
 	Isp, Loc string
 }
 
-type label struct {
-	isp, loc pointer
+type labPtr struct {
+	isp, loc ptr
 }
 
-var emptyLabel = label{pointer{Nil, 0}, pointer{Nil, 0}}
+var emptyLabel = labPtr{ptr{Nil, 0}, ptr{Nil, 0}}
 
-func (e *label) equal(e1 label) bool {
-	return e.isp.Equal(&e1.isp) && e.loc.Equal(&e1.loc)
+type ptr struct {
+	s, l int
 }
 
-type pointer struct {
-	start, length int
-}
-
-func (p *pointer) Equal(p1 *pointer) bool {
-	return p.start == p1.start && p.length == p1.length
+func (p *ptr) Equal(p1 *ptr) bool {
+	return p.s == p1.s && p.l == p1.l
 }
 
 type Trie struct {
-	ver   int
-	nodes []node
-	label []byte
+	ver    int
+	nodes  []node
+	labels []byte
 }
 
-func New() *Trie { return new(Trie) }
+func New(v int) *Trie { return &Trie{ver: v} }
 
 func (t *Trie) Init(entries []Entry) error {
-	var pointers = make(map[string]pointer)
-	var newLabelItem = func(str string) pointer {
-		if _, ok := pointers[str]; !ok {
-			t.label = append(t.label, []byte(str)...)
-			pointers[str] = pointer{
-				length: len(str),
-				start:  len(t.label) - len(str)}
+	var pBuf = make(map[string]ptr)
+	var toPtr = func(str string) ptr {
+		if _, ok := pBuf[str]; !ok {
+			t.labels = append(t.labels, []byte(str)...)
+			pBuf[str] = ptr{l: len(str), s: len(t.labels) - len(str)}
 		}
-
-		return pointers[str]
+		return pBuf[str]
 	}
-	var newLabel = func(l Label) label {
-		return label{isp: newLabelItem(l.Isp), loc: newLabelItem(l.Loc)}
+	var labelToPtr = func(l Label) labPtr {
+		return labPtr{isp: toPtr(l.Isp), loc: toPtr(l.Loc)}
 	}
 
 	_, rootNet, _ := net.ParseCIDR("0.0.0.0/0")
 	if t.ver == IPv6 {
 		_, rootNet, _ = net.ParseCIDR("0::0/0")
 	}
-	var rootNode = t.newNode(NewNetwork(*rootNet), newLabel(Label{Isp: "any", Loc: "any"}), 0)
+
+	var rootNode = t.newNode(*NewNetwork(*rootNet), labelToPtr(Label{Isp: "any", Loc: "any"}), 0)
 
 	for _, cfg := range entries {
 		var _, ipNet, err = net.ParseCIDR(cfg.Network)
@@ -77,7 +71,7 @@ func (t *Trie) Init(entries []Entry) error {
 			return fmt.Errorf("network of %s is nil", cfg.Network)
 		}
 
-		if err := rootNode.maybeInsert(*network, newLabel(cfg.Label), t); err != nil {
+		if err := rootNode.maybeInsert(*network, labelToPtr(cfg.Label), t); err != nil {
 			return err
 		}
 	}
@@ -94,7 +88,7 @@ func (t *Trie) Match(ip net.IP) (ok bool, label Label, err error) {
 	return t.nodeAt(0).matchNetwork(&number, t)
 }
 
-func (t *Trie) newNode(network Network, label label, gap uint) *node {
+func (t *Trie) newNode(network Network, label labPtr, gap uint) *node {
 	t.nodes = append(t.nodes, node{
 		myIdx:    Nil,
 		childIdx: [2]int{Nil, Nil},
@@ -117,7 +111,7 @@ func (t *Trie) nodeAt(idx int) *node {
 	return &t.nodes[idx]
 }
 
-func (t *Trie) labelAt(pos label) (ret Label, ok bool) {
+func (t *Trie) labelAt(pos labPtr) (ret Label, ok bool) {
 	if ret.Isp, ok = t.strAt(pos.isp); !ok {
 		return ret, false
 	}
@@ -126,21 +120,23 @@ func (t *Trie) labelAt(pos label) (ret Label, ok bool) {
 	}
 	return
 }
-func (t *Trie) strAt(p pointer) (string, bool) {
-	var s, l = p.start, p.length
-	if s > 0 && s+l <= len(t.label) {
-		return string(t.label[s : s+l]), true
+
+func (t *Trie) strAt(p ptr) (string, bool) {
+	var s, l = p.s, p.l
+	if s > 0 && s+l <= len(t.labels) {
+		return string(t.labels[s : s+l]), true
 	}
 	return "", false
 }
 
+// 19*4 bytes
 type node struct {
 	gap      uint
 	myIdx    int
 	childIdx [2]int
 
 	network Network
-	label   label
+	label   labPtr
 }
 
 func (n *node) matchNetwork(nn *NetworkNumber, t *Trie) (ok bool, label Label, err error) {
@@ -148,15 +144,19 @@ func (n *node) matchNetwork(nn *NetworkNumber, t *Trie) (ok bool, label Label, e
 		return
 	}
 
-	if bit, err := n.childBitOf(nn); err != nil {
+	bit, err := n.childBitOf(nn)
+
+	fmt.Printf("node %p %s, child bit %d, child idx is %d\n", n, n.network.String(), bit, n.childIdx[bit])
+
+	if err != nil {
 		return false, label, err
 	} else if child := t.nodeAt(n.childIdx[bit]); child != nil {
+		fmt.Printf("child %p %s\n", child, child.network.String())
 		// 深度优先，取底层match节点label
-		if ok, label, err = child.matchNetwork(nn, t); err != nil {
-			return false, label, err
-		}
+		return child.matchNetwork(nn, t)
 	}
 
+	fmt.Printf("ok %t\n", ok)
 	// 子节点没有label, 返回本节点可能存在的label
 	if !ok {
 		label, ok = t.labelAt(n.label)
@@ -165,7 +165,7 @@ func (n *node) matchNetwork(nn *NetworkNumber, t *Trie) (ok bool, label Label, e
 	return
 }
 
-func (n *node) maybeInsert(network Network, label label, t *Trie) error {
+func (n *node) maybeInsert(network Network, label labPtr, t *Trie) error {
 	if n.network.Equal(&network) {
 		n.label = label
 		return nil
@@ -180,6 +180,7 @@ func (n *node) maybeInsert(network Network, label label, t *Trie) error {
 	// 计算bit处子节点索引
 	var cIdx = n.childIdx[bit]
 	if cIdx == Nil {
+		fmt.Printf("node %p %s insert new node %s\n", n, n.network.String(), network.String())
 		return n.insert(bit, t.newNode(network, label, uint(network.Mask.Ones())), t)
 	}
 
@@ -221,7 +222,7 @@ func (n *node) insert(bit uint32, node *node, t *Trie) error {
 		// 计算child在node子节点的位置
 		cBit, err := node.childBitOf(&child.network.Number)
 		if err != nil {
-			return err
+			return fmt.Errorf("child bit of %s is %s", child.network.String(), err)
 		}
 
 		// 将child挂载到node下
@@ -231,7 +232,7 @@ func (n *node) insert(bit uint32, node *node, t *Trie) error {
 	}
 
 	// node挂载到n下
-	n.childIdx[bit] = node.myIdx
+	t.nodes[n.myIdx].childIdx[bit] = node.myIdx
 
 	return nil
 }

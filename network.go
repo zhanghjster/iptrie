@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strings"
 )
 
 const (
@@ -183,4 +184,11 @@ func (n *Network) String() string {
 		Mask: net.IPMask(n.Mask.NetworkNumber.ToIP()),
 	}
 	return ipNet.String()
+}
+
+func IpVer(ip string) int {
+	if strings.Contains(ip, ":") {
+		return IPv6
+	}
+	return IPv4
 }
